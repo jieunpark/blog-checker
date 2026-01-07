@@ -46,23 +46,40 @@ def get_blog_posts(blog_id, count=100):
     return posts, total_entries
 
 def check_indexing(blog_id, title):
-    """네이버 검색에서 인덱싱 여부 확인"""
+    """네이버 검색에서 인덱싱 여부 확인 (개선된 버전)"""
     try:
         # 검색 URL 생성
         encoded_title = quote(f'"{title}"')
         search_url = f"https://search.naver.com/search.naver?ssc=tab.blog.all&query={encoded_title}"
-        
+
         # 검색 실행
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         }
         response = requests.get(search_url, headers=headers, timeout=10)
-        
-        # 본인 블로그 URL 찾기
-        if f"blog.naver.com/{blog_id}" in response.text:
-            return "정상"
-        else:
-            return "누락"
+
+        # BeautifulSoup으로 파싱
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # 검색 결과 영역에서만 확인
+        # div.api_subject_bx: 블로그 검색 결과 항목
+        search_results = soup.select('div.api_subject_bx')
+
+        if not search_results:
+            # 검색 결과가 없는 경우 (다른 구조일 수도 있으므로 fallback)
+            if f"blog.naver.com/{blog_id}" in response.text:
+                return "정상 (전체)"
+            else:
+                return "누락"
+
+        # 검색 결과 영역에서 본인 블로그 URL 찾기
+        for result in search_results:
+            result_html = str(result)
+            if f"blog.naver.com/{blog_id}" in result_html:
+                return "정상"
+
+        return "누락"
+
     except Exception as e:
         return f"오류: {str(e)}"
 
@@ -85,12 +102,21 @@ st.markdown("""
         font-weight: bold;
         text-align: center;
     }
+    .status-normal-full {
+        background-color: #17a2b8;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-weight: bold;
+        text-align: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # Streamlit UI
-st.title("📊 네이버 블로그 인덱싱 체크")
+st.title("📊 네이버 블로그 인덱싱 체크 v2 (개선)")
 st.write("블로그의 최근 글들이 네이버 검색에 제대로 노출되는지 확인합니다.")
+st.info("🔍 개선사항: BeautifulSoup으로 실제 검색 결과 영역에서만 확인합니다.")
 
 # 입력
 blog_id = st.text_input("블로그 아이디", value="money-park")
@@ -107,20 +133,20 @@ if st.button("🔍 검색 시작", type="primary"):
         if total_entries < post_count:
             st.warning(f"⚠️ RSS 피드에서 {total_entries}개만 제공됩니다. (요청: {post_count}개)")
         st.success(f"총 {len(posts)}개 글을 찾았습니다.")
-        
+
         # 프로그레스 바
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         # 결과 저장
         results = []
-        
+
         for idx, post in enumerate(posts):
             status_text.text(f"확인 중: {idx+1}/{len(posts)} - {post['제목'][:30]}...")
-            
+
             # 인덱싱 체크
             status = check_indexing(blog_id, post['제목'])
-            
+
             results.append({
                 '번호': idx + 1,
                 '제목': post['제목'],
@@ -128,13 +154,13 @@ if st.button("🔍 검색 시작", type="primary"):
                 '누락 여부': status,
                 'URL': post['URL']
             })
-            
+
             # 프로그레스 업데이트
             progress_bar.progress((idx + 1) / len(posts))
-            
+
             # 요청 간격 (네이버 차단 방지)
             time.sleep(0.5)
-        
+
         status_text.text("✅ 완료!")
 
         # 결과 저장 (session state에 저장하여 페이지 변경 시에도 유지)
@@ -201,6 +227,8 @@ if 'results' in st.session_state and st.session_state['results']:
     def style_status(status):
         if status == '정상':
             return '<div class="status-normal">정상</div>'
+        elif status == '정상 (전체)':
+            return '<div class="status-normal-full">정상 (전체)</div>'
         elif status == '누락':
             return '<div class="status-missing">누락</div>'
         else:
@@ -245,6 +273,6 @@ if 'results' in st.session_state and st.session_state['results']:
     st.download_button(
         label="📥 전체 결과 CSV 다운로드",
         data=csv,
-        file_name=f"{blog_id}_indexing_check.csv",
+        file_name=f"{blog_id}_indexing_check_v2.csv",
         mime="text/csv"
     )

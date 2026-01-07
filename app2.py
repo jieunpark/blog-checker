@@ -119,8 +119,32 @@ st.write("블로그의 최근 글들이 네이버 검색에 제대로 노출되�
 st.info("🔍 개선사항: BeautifulSoup으로 실제 검색 결과 영역에서만 확인합니다.")
 
 # 입력
-blog_id = st.text_input("블로그 아이디", value="money-park")
-post_count = st.number_input("확인할 글 개수", min_value=1, max_value=50, value=50)
+st.subheader("블로그 선택")
+
+# 블로그 목록
+blogs = {
+    "money-park": "머니파기",
+    "jiseonshine": "지선샤인",
+    "youngii-master": "영이마스터",
+    "yugioh007": "유기오007"
+}
+
+# session_state에 저장된 값이 없으면 기본값 설정
+if 'blog_id_input' not in st.session_state:
+    st.session_state['blog_id_input'] = "money-park"
+
+# 버튼으로 블로그 선택
+cols = st.columns(4)
+for idx, (blog_id_option, blog_name) in enumerate(blogs.items()):
+    with cols[idx]:
+        if st.button(f"📝 {blog_name}", key=f"btn_{blog_id_option}", use_container_width=True):
+            st.session_state['blog_id_input'] = blog_id_option
+            st.rerun()
+
+# 선택된 블로그 아이디 표시
+blog_id = st.text_input("블로그 아이디", key="blog_id_input")
+
+post_count = st.number_input("확인할 글 개수", min_value=1, max_value=50, value=10)
 
 # 실행 버튼
 if st.button("🔍 검색 시작", type="primary"):
@@ -186,42 +210,8 @@ if 'results' in st.session_state and st.session_state['results']:
     col2.metric("정상", normal, delta=f"{normal/total*100:.1f}%")
     col3.metric("누락", missing, delta=f"-{missing/total*100:.1f}%" if missing > 0 else "0%")
 
-    # 페이징 설정
+    # 상세 결과
     st.subheader("📋 상세 결과")
-    items_per_page = 50
-    total_pages = math.ceil(len(df) / items_per_page)
-
-    # 페이지 선택
-    if 'current_page' not in st.session_state:
-        st.session_state['current_page'] = 1
-
-    col_prev, col_page, col_next = st.columns([1, 3, 1])
-
-    with col_prev:
-        if st.button("◀ 이전", disabled=(st.session_state['current_page'] == 1)):
-            st.session_state['current_page'] -= 1
-            st.rerun()
-
-    with col_page:
-        page = st.selectbox(
-            "페이지",
-            options=range(1, total_pages + 1),
-            index=st.session_state['current_page'] - 1,
-            key='page_selector'
-        )
-        if page != st.session_state['current_page']:
-            st.session_state['current_page'] = page
-            st.rerun()
-
-    with col_next:
-        if st.button("다음 ▶", disabled=(st.session_state['current_page'] == total_pages)):
-            st.session_state['current_page'] += 1
-            st.rerun()
-
-    # 현재 페이지 데이터
-    start_idx = (st.session_state['current_page'] - 1) * items_per_page
-    end_idx = start_idx + items_per_page
-    page_df = df.iloc[start_idx:end_idx].copy()
 
     # 누락 여부 컬럼에 HTML 스타일 적용
     def style_status(status):
@@ -234,25 +224,26 @@ if 'results' in st.session_state and st.session_state['results']:
         else:
             return status
 
-    page_df['누락 여부'] = page_df['누락 여부'].apply(style_status)
+    display_df = df.copy()
+    display_df['누락 여부'] = display_df['누락 여부'].apply(style_status)
 
     # 테이블을 HTML로 변환하여 표시
-    st.markdown(f"**{start_idx + 1}-{min(end_idx, len(df))} / {len(df)}개 표시**")
+    st.markdown(f"**전체 {len(df)}개 표시**")
 
     # 테이블 표시 (더 넓은 width)
     st.markdown('<div style="width: 100%; overflow-x: auto;">', unsafe_allow_html=True)
 
     # HTML 테이블 생성
     html_table = '<table style="width: 100%; border-collapse: collapse;">'
-    html_table += '<thead><tr style="background-color: #f0f2f6;">'
-    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center;">번호</th>'
-    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: left; min-width: 300px;">제목</th>'
-    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 200px;">발행일</th>'
-    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">누락 여부</th>'
-    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px;">URL</th>'
+    html_table += '<thead><tr style="background-color: #343a40;">'
+    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center; color: white; font-weight: bold;">번호</th>'
+    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: left; min-width: 300px; color: white; font-weight: bold;">제목</th>'
+    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 200px; color: white; font-weight: bold;">발행일</th>'
+    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px; color: white; font-weight: bold;">누락 여부</th>'
+    html_table += '<th style="padding: 10px; border: 1px solid #ddd; text-align: center; min-width: 100px; color: white; font-weight: bold;">URL</th>'
     html_table += '</tr></thead><tbody>'
 
-    for _, row in page_df.iterrows():
+    for _, row in display_df.iterrows():
         html_table += '<tr>'
         html_table += f'<td style="padding: 10px; border: 1px solid #ddd; text-align: center;">{row["번호"]}</td>'
         html_table += f'<td style="padding: 10px; border: 1px solid #ddd;">{row["제목"]}</td>'
